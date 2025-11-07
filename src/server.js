@@ -29,10 +29,20 @@ app.post("/fb/webhook", async (req, res) => {
 
     if (value?.item === "comment" && value?.verb === "add") {
       const author = value.from?.name || "Unknown";
-      const comment = value.message || "No message";
+      const comment = value.message || "(No text)";
       const commentId = value.comment_id;
 
-      const text = `👤 By: ${author}\n💬 Comment: ${comment}\n🆔 Comment ID: \`${commentId}\``;
+      // Clean format — easy copy
+      const text = 
+`👤 *By:* ${author}
+💬 *Comment:*
+\`\`\`
+${comment}
+\`\`\`
+🆔 *Comment ID:* \`${commentId}\`
+
+👉 *Salin komen di atas & paste ke ChatGPT untuk dapat jawapan.*
+`;
 
       const inlineKeyboard = {
         inline_keyboard: [[{ text: "📝 Post to FB", switch_inline_query_current_chat: `/post ${commentId}` }]],
@@ -63,18 +73,22 @@ app.post("/telegram", async (req, res) => {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
 
+    // Bila tekan Post to FB
     if (text?.startsWith("/post")) {
       const commentId = text.split(" ")[1];
       if (!commentId) return await sendTelegram(chatId, "⚠️ Guna format: /post <comment_id>");
       await sendTelegram(chatId, `🧾 Paste jawapan ChatGPT untuk komen ni:\n\`${commentId}\``, { force_reply: true });
-    } else if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
+    }
+    // Bila user reply dengan jawapan ChatGPT
+    else if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
       const match = msg.reply_to_message.text.match(/`(.*?)`/);
       const commentId = match ? match[1] : null;
       if (commentId && text) {
         await postToFacebook(commentId, text);
-        await sendTelegram(chatId, "✅ Dah auto reply komen dekat Facebook!");
+        await sendTelegram(chatId, "✅ Dah auto-reply komen dekat Facebook!");
       }
     }
+
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ Telegram handler error:", err.message);
@@ -105,7 +119,7 @@ async function postToFacebook(commentId, message) {
 // ✅ HEALTH CHECK
 app.get("/health", (_, res) => res.send("✅ Server Running OK"));
 
-// ✅ START
+// ✅ START SERVER
 app.listen(PORT || 3000, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Base URL: ${PUBLIC_BASE_URL}`);
