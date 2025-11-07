@@ -30,6 +30,12 @@ app.use(bodyParser.json());
 const LOG_DIR = "./logs";
 const LOG_FILE = `${LOG_DIR}/replied.json`;
 fs.ensureFileSync(LOG_FILE);
+try {
+  const data = fs.readFileSync(LOG_FILE, "utf8");
+  if (!data.trim()) fs.writeJSONSync(LOG_FILE, []);
+} catch {
+  fs.writeJSONSync(LOG_FILE, []);
+}
 if (!fs.existsSync(LOG_FILE)) fs.writeJSONSync(LOG_FILE, []);
 
 // Auto cleanup helper
