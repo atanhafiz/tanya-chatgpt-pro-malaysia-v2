@@ -47,8 +47,7 @@ ${comment}
 \`\`\`
 🆔 *Comment ID:* \`${commentId}\`
 
-👉 *Salin komen di atas & paste ke ChatGPT untuk dapat jawapan.*
-`;
+👉 *Salin komen di atas & paste ke ChatGPT untuk dapat jawapan.*`;
 
       const inlineKeyboard = {
         inline_keyboard: [[{ text: "📝 Post to FB", callback_data: `post_${commentId}` }]],
@@ -82,7 +81,7 @@ app.post("/telegram", async (req, res) => {
       const chatId = cb.message.chat.id;
       const commentId = cb.data.replace("post_", "");
 
-      // Bagi respon cepat supaya Telegram tak retry
+      // Hantar respon cepat untuk elak Telegram retry
       res.sendStatus(200);
 
       try {
@@ -110,7 +109,6 @@ app.post("/telegram", async (req, res) => {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
 
-    // Detect sama ada user reply ATAU mesej panjang biasa
     let commentId = null;
 
     // kalau mesej reply
@@ -123,7 +121,6 @@ app.post("/telegram", async (req, res) => {
     const idMatch = text?.match(/\d+_\d+/);
     if (!commentId && idMatch) commentId = idMatch[0];
 
-    // kalau masih tak detect ID, log & skip
     if (!commentId) {
       console.log("⚠️ Tiada commentId dijumpai dalam mesej:", text);
       return res.sendStatus(200);
@@ -139,27 +136,6 @@ app.post("/telegram", async (req, res) => {
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ Telegram webhook error:", err.message || err);
-    res.status(500).send("Webhook processing error");
-  }
-});
-
-    // === USER REPLY (Paste jawapan ChatGPT) ===
-    const msg = update.message;
-    if (msg?.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
-      const chatId = msg.chat.id;
-      const text = msg.text?.trim();
-      const match = msg.reply_to_message.text.match(/`(.*?)`/);
-      const commentId = match ? match[1] : null;
-
-      if (commentId && text) {
-        await postToFacebook(commentId, text);
-        await sendTelegram(chatId, "✅ Dah auto-reply komen dekat Facebook!");
-      }
-    }
-
-    res.sendStatus(200);
-  } catch (err) {
-    console.error("❌ Telegram handler error:", err.message || err);
     res.status(500).send("Webhook processing error");
   }
 });
