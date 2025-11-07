@@ -39,7 +39,7 @@ app.post("/fb/webhook", async (req, res) => {
       const comment = value.message || "(No text)";
       const commentId = value.comment_id;
 
-      const text =
+      const text = 
 `👤 *By:* ${author}
 💬 *Comment:*
 \`\`\`
@@ -50,9 +50,9 @@ ${comment}
 👉 *Salin komen di atas & paste ke ChatGPT untuk dapat jawapan.*
 `;
 
-const inlineKeyboard = {
-  inline_keyboard: [[{ text: "📝 Post to FB", callback_data: `post_${commentId}` }]],
-};
+      const inlineKeyboard = {
+        inline_keyboard: [[{ text: "📝 Post to FB", callback_data: `post_${commentId}` }]],
+      };
 
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         chat_id: TELEGRAM_CHAT_ID,
@@ -63,6 +63,7 @@ const inlineKeyboard = {
 
       console.log(`[FB→TG] ${author}: ${comment}`);
     }
+
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ FB→TG Error:", err.response?.data || err.message);
@@ -75,28 +76,35 @@ app.post("/telegram", async (req, res) => {
   try {
     const update = req.body;
 
-    // Bila tekan butang Post to FB
-    if (req.body.callback_query) {
-      const cb = req.body.callback_query;
+    // === CALLBACK (Post to FB button) ===
+    if (update.callback_query) {
+      const cb = update.callback_query;
       const chatId = cb.message.chat.id;
       const commentId = cb.data.replace("post_", "");
-    
-      // Bila user tekan Post to FB, bot terus balas
-      await sendTelegram(
-        chatId,
-        `🧾 Paste jawapan ChatGPT untuk komen ni:\n\`${commentId}\``,
-        { force_reply: true }
-      );
-    
-      // confirm pada Telegram supaya button hilang loading
-      await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-        callback_query_id: cb.id,
-      });
-    
-      return res.sendStatus(200);
+
+      // Reply segera 200 OK untuk elak Telegram retry banyak kali
+      res.sendStatus(200);
+
+      try {
+        await sendTelegram(
+          chatId,
+          `🧾 Paste jawapan ChatGPT untuk komen ni:\n\`${commentId}\``,
+          { force_reply: true }
+        );
+
+        // Jawab callback supaya butang loading hilang
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+          callback_query_id: cb.id,
+        });
+
+        console.log(`🟢 Callback processed untuk commentId: ${commentId}`);
+      } catch (err) {
+        console.error("❌ Callback processing error:", err.response?.data || err.message);
+      }
+      return;
     }
-    
-    // Bila user reply dengan jawapan ChatGPT
+
+    // === USER REPLY (Paste jawapan ChatGPT) ===
     const msg = update.message;
     if (msg?.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
       const chatId = msg.chat.id;
@@ -112,8 +120,8 @@ app.post("/telegram", async (req, res) => {
 
     res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Telegram handler error:", err.message);
-    res.sendStatus(500);
+    console.error("❌ Telegram handler error:", err.message || err);
+    res.status(500).send("Webhook processing error");
   }
 });
 
