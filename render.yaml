@@ -1,11 +1,22 @@
 services:
   - type: web
     name: tanya-chatgpt-pro-malaysia
-    env: docker
-    plan: free
+    env: node
     region: singapore
-    dockerfilePath: ./Dockerfile
-    rootDir: .
+    plan: starter
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
     envVars:
       - key: PORT
         value: 3000
+      - key: FB_PAGE_TOKEN
+        sync: false
+      - key: FB_VERIFY_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: PUBLIC_BASE_URL
+        value: https://fb.quicktoolstech.com

@@ -3,38 +3,15 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import axios from "axios";
 import cors from "cors";
-import fs from "fs-extra";
-
 dotenv.config();
-
-const {
-  PORT,
-  FB_PAGE_TOKEN,
-  FB_VERIFY_TOKEN,
-  TELEGRAM_BOT_TOKEN,
-  TELEGRAM_TOKEN,
-  ALLOWED_CHAT_IDS,
-  PUBLIC_BASE_URL,
-} = process.env;
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-// ================== LOG INIT ==================
-const LOG_DIR = "./logs";
-const LOG_FILE = `${LOG_DIR}/replied.json`;
-fs.ensureFileSync(LOG_FILE);
-try {
-  const data = fs.readFileSync(LOG_FILE, "utf8");
-  if (!data.trim()) fs.writeJSONSync(LOG_FILE, []);
-} catch {
-  fs.writeJSONSync(LOG_FILE, []);
-}
+const { PORT, FB_PAGE_TOKEN, FB_VERIFY_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PUBLIC_BASE_URL } = process.env;
 
-console.log("🤖 Telegram bot initialized (Direct Mode)");
-
-// ================== FACEBOOK VERIFY ==================
+// ✅ FACEBOOK VERIFY
 app.get("/fb/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -43,7 +20,7 @@ app.get("/fb/webhook", (req, res) => {
   res.sendStatus(403);
 });
 
-// ================== FACEBOOK EVENT ==================
+// ✅ FACEBOOK EVENT
 app.post("/fb/webhook", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
@@ -53,40 +30,31 @@ app.post("/fb/webhook", async (req, res) => {
     if (value?.item === "comment" && value?.verb === "add") {
       const author = value.from?.name || "Unknown";
       const comment = value.message || "No message";
-      const postId = value.post_id;
       const commentId = value.comment_id;
-      const postLink = `https://facebook.com/${postId}`;
 
-      const promptNormal = `💬 *Prompt:*\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
-      const promptAhe = `🎯 *AHE Prompt Style*\n\nTolong jawab komen ni dengan tone profesional & mesra pelanggan AHE:\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
+      const text = `👤 By: ${author}\n💬 Comment: ${comment}\n🆔 Comment ID: \`${commentId}\``;
 
-      const msg = `
-🆕 *FB Comment Detected!*
-👤 *By:* ${author}
-💭 *Comment:* ${comment}
-🔗 *Post:* [View Post](${postLink})
-🆔 *Comment ID:* \`${commentId}\`
+      const inlineKeyboard = {
+        inline_keyboard: [[{ text: "📝 Post to FB", switch_inline_query_current_chat: `/post ${commentId}` }]],
+      };
 
-📋 *Prompt:*
-${promptNormal}
+      await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        chat_id: TELEGRAM_CHAT_ID,
+        text,
+        parse_mode: "Markdown",
+        reply_markup: inlineKeyboard,
+      });
 
-🗣️ *AHE Tone:*
-${promptAhe}
-
-🏷️ _Powered by AHE Technology | Tanya ChatGPT Pro Malaysia_
-`;
-
-      await sendTelegram(ALLOWED_CHAT_IDS, msg);
-      console.log(`[FACEBOOK] 💬 New comment logged: ${author}`);
+      console.log(`[FB→TG] ${author}: ${comment}`);
     }
     res.sendStatus(200);
   } catch (err) {
-    console.error("❌ FB webhook error:", err.message);
+    console.error("❌ FB→TG Error:", err.response?.data || err.message);
     res.sendStatus(500);
   }
 });
 
-// ================== TELEGRAM HANDLER ==================
+// ✅ TELEGRAM HANDLER
 app.post("/telegram", async (req, res) => {
   try {
     const msg = req.body.message;
@@ -94,32 +62,27 @@ app.post("/telegram", async (req, res) => {
 
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
-    const allowed = ALLOWED_CHAT_IDS?.split(",").map((id) => id.trim());
-    if (allowed && !allowed.includes(String(chatId))) return res.sendStatus(200);
 
-    if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste your reply for comment ID")) {
+    if (text?.startsWith("/post")) {
+      const commentId = text.split(" ")[1];
+      if (!commentId) return await sendTelegram(chatId, "⚠️ Guna format: /post <comment_id>");
+      await sendTelegram(chatId, `🧾 Paste jawapan ChatGPT untuk komen ni:\n\`${commentId}\``, { force_reply: true });
+    } else if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
       const match = msg.reply_to_message.text.match(/`(.*?)`/);
       const commentId = match ? match[1] : null;
       if (commentId && text) {
         await postToFacebook(commentId, text);
-        await sendTelegram(chatId, `✅ Reply posted to Facebook!\n\n🏷️ _AHE Technology | Tanya ChatGPT Pro Malaysia_`);
+        await sendTelegram(chatId, "✅ Dah auto reply komen dekat Facebook!");
       }
-    } else if (text?.startsWith("/post")) {
-      const commentId = text.split(" ")[1];
-      if (!commentId) return await sendTelegram(chatId, `⚠️ Usage: /post <comment_id>`);
-      await sendTelegram(chatId, `🧾 Paste your reply for comment ID:\n\`${commentId}\``, { force_reply: true });
-    } else if (text === "/status") {
-      await sendTelegram(chatId, "📊 System OK — v1.5.6 Direct Mode running");
     }
-
     res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Telegram webhook error:", err.message);
+    console.error("❌ Telegram handler error:", err.message);
     res.sendStatus(500);
   }
 });
 
-// ================== FUNCTIONS ==================
+// ✅ FUNCTIONS
 async function sendTelegram(chatId, text, options = {}) {
   await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     chat_id: chatId,
@@ -129,31 +92,20 @@ async function sendTelegram(chatId, text, options = {}) {
   });
 }
 
-// force rebuild debug 1// Debug rebuild: v1.5.8
-
-
-
 async function postToFacebook(commentId, message) {
   const url = `https://graph.facebook.com/v21.0/${commentId}/comments`;
   try {
     const res = await axios.post(`${url}?access_token=${FB_PAGE_TOKEN}`, { message });
     console.log(`✅ Posted reply to FB comment: ${commentId}`, res.data);
   } catch (err) {
-    console.error("❌ FB post error full dump:");
-    console.error("➡️ URL:", url);
-    console.error("➡️ Comment ID:", commentId);
-    console.error("➡️ Message sent:", message);
-    console.error("➡️ Status:", err.response?.status);
-    console.error("➡️ Data:", err.response?.data);
-    console.error("➡️ Headers:", err.response?.headers);
-    console.error("➡️ Full Error:", err.toJSON ? err.toJSON() : err.message);
+    console.error("❌ FB post error:", err.response?.data || err.message);
   }
 }
 
-// ================== HEALTH CHECK ==================
-app.get("/health", (req, res) => res.send("✅ Server Running OK"));
+// ✅ HEALTH CHECK
+app.get("/health", (_, res) => res.send("✅ Server Running OK"));
 
-// ================== START SERVER ==================
+// ✅ START
 app.listen(PORT || 3000, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Base URL: ${PUBLIC_BASE_URL}`);
