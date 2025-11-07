@@ -32,7 +32,7 @@ try {
   fs.writeJSONSync(LOG_FILE, []);
 }
 
-console.log("🤖 Telegram bot initialized (webhook mode)");
+console.log("🤖 Telegram bot initialized (Direct Mode)");
 
 // ================== FACEBOOK VERIFY ==================
 app.get("/fb/webhook", (req, res) => {
@@ -57,6 +57,9 @@ app.post("/fb/webhook", async (req, res) => {
       const commentId = value.comment_id;
       const postLink = `https://facebook.com/${postId}`;
 
+      const promptNormal = `💬 *Prompt:*\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
+      const promptAhe = `🎯 *AHE Prompt Style*\n\nTolong jawab komen ni dengan tone profesional & mesra pelanggan AHE:\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
+
       const msg = `
 🆕 *FB Comment Detected!*
 👤 *By:* ${author}
@@ -64,10 +67,16 @@ app.post("/fb/webhook", async (req, res) => {
 🔗 *Post:* [View Post](${postLink})
 🆔 *Comment ID:* \`${commentId}\`
 
+📋 *Prompt:*
+${promptNormal}
+
+🗣️ *AHE Tone:*
+${promptAhe}
+
 🏷️ _Powered by AHE Technology | Tanya ChatGPT Pro Malaysia_
 `;
 
-      await sendTelegramMessage(msg);
+      await sendTelegram(ALLOWED_CHAT_IDS, msg);
       console.log(`[FACEBOOK] 💬 New comment logged: ${author}`);
     }
     res.sendStatus(200);
@@ -80,36 +89,7 @@ app.post("/fb/webhook", async (req, res) => {
 // ================== TELEGRAM HANDLER ==================
 app.post("/telegram", async (req, res) => {
   try {
-    const update = req.body;
-
-    // === Detect callback button ===
-    if (update.callback_query) {
-      const cb = update.callback_query;
-      const chatId = cb.message.chat.id;
-      const data = cb.data;
-      const commentMatch = cb.message.text.match(/💭 \*Comment:\* (.*)/);
-      const comment = commentMatch ? commentMatch[1] : "Tiada komen.";
-
-      console.log(`📩 Telegram callback detected: ${data}`);
-      console.log(`💭 Comment: ${comment}`);
-
-      if (data === "copy_prompt") {
-        const prompt = `💬 *Prompt:*\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
-        await sendTelegram(chatId, prompt);
-      } else if (data === "copy_ahe") {
-        const prompt = `🎯 *AHE Prompt Style*\n\nTolong jawab komen ni dengan tone profesional & mesra pelanggan AHE:\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
-        await sendTelegram(chatId, prompt);
-      }
-
-      await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-        callback_query_id: cb.id,
-      });
-
-      return res.sendStatus(200);
-    }
-
-    // === Detect normal message ===
-    const msg = update.message;
+    const msg = req.body.message;
     if (!msg) return res.sendStatus(200);
 
     const chatId = msg.chat.id;
@@ -129,7 +109,7 @@ app.post("/telegram", async (req, res) => {
       if (!commentId) return await sendTelegram(chatId, `⚠️ Usage: /post <comment_id>`);
       await sendTelegram(chatId, `🧾 Paste your reply for comment ID:\n\`${commentId}\``, { force_reply: true });
     } else if (text === "/status") {
-      await sendTelegram(chatId, "📊 System OK — v1.5.5 Guard Mode running");
+      await sendTelegram(chatId, "📊 System OK — v1.5.6 Direct Mode running");
     }
 
     res.sendStatus(200);
@@ -140,25 +120,6 @@ app.post("/telegram", async (req, res) => {
 });
 
 // ================== FUNCTIONS ==================
-async function sendTelegramMessage(text) {
-  const inlineKeyboard = {
-    inline_keyboard: [
-      [
-        { text: "📋 Copy Prompt", callback_data: "copy_prompt" },
-        { text: "🗣️ Copy Prompt – AHE Tone", callback_data: "copy_ahe" },
-      ],
-      [{ text: "📝 Post to FB", switch_inline_query_current_chat: "/post " }],
-    ],
-  };
-
-  await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    chat_id: ALLOWED_CHAT_IDS,
-    text,
-    parse_mode: "Markdown",
-    reply_markup: inlineKeyboard,
-  });
-}
-
 async function sendTelegram(chatId, text, options = {}) {
   await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     chat_id: chatId,
