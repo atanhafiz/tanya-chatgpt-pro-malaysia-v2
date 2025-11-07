@@ -135,7 +135,14 @@ async function postToFacebook(commentId, message) {
     const res = await axios.post(`${url}?access_token=${FB_PAGE_TOKEN}`, { message });
     console.log(`✅ Posted reply to FB comment: ${commentId}`, res.data);
   } catch (err) {
-    console.error("❌ FB post error details:", err.response?.data || err.message);
+    console.error("❌ FB post error full dump:");
+    console.error("➡️ URL:", url);
+    console.error("➡️ Comment ID:", commentId);
+    console.error("➡️ Message sent:", message);
+    console.error("➡️ Status:", err.response?.status);
+    console.error("➡️ Data:", err.response?.data);
+    console.error("➡️ Headers:", err.response?.headers);
+    console.error("➡️ Full Error:", err.toJSON ? err.toJSON() : err.message);
   }
 }
 
