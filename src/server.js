@@ -9,7 +9,14 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-const { PORT, FB_PAGE_TOKEN, FB_VERIFY_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, PUBLIC_BASE_URL } = process.env;
+const {
+  PORT,
+  FB_PAGE_TOKEN,
+  FB_VERIFY_TOKEN,
+  TELEGRAM_BOT_TOKEN,
+  TELEGRAM_CHAT_ID,
+  PUBLIC_BASE_URL,
+} = process.env;
 
 // ✅ FACEBOOK VERIFY
 app.get("/fb/webhook", (req, res) => {
@@ -20,7 +27,7 @@ app.get("/fb/webhook", (req, res) => {
   res.sendStatus(403);
 });
 
-// ✅ FACEBOOK EVENT
+// ✅ FACEBOOK EVENT → SEND TO TELEGRAM
 app.post("/fb/webhook", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
@@ -32,8 +39,7 @@ app.post("/fb/webhook", async (req, res) => {
       const comment = value.message || "(No text)";
       const commentId = value.comment_id;
 
-      // Clean format — easy copy
-      const text = 
+      const text =
 `👤 *By:* ${author}
 💬 *Comment:*
 \`\`\`
@@ -45,7 +51,9 @@ ${comment}
 `;
 
       const inlineKeyboard = {
-        inline_keyboard: [[{ text: "📝 Post to FB", switch_inline_query_current_chat: `/post ${commentId}` }]],
+        inline_keyboard: [
+          [{ text: "📝 Post to FB", callback_data: `post_${commentId}` }],
+        ],
       };
 
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -67,22 +75,33 @@ ${comment}
 // ✅ TELEGRAM HANDLER
 app.post("/telegram", async (req, res) => {
   try {
-    const msg = req.body.message;
-    if (!msg) return res.sendStatus(200);
+    const update = req.body;
 
-    const chatId = msg.chat.id;
-    const text = msg.text?.trim();
+    // Bila tekan butang Post to FB
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const chatId = cb.message.chat.id;
+      const commentId = cb.data.replace("post_", "");
 
-    // Bila tekan Post to FB
-    if (text?.startsWith("/post")) {
-      const commentId = text.split(" ")[1];
-      if (!commentId) return await sendTelegram(chatId, "⚠️ Guna format: /post <comment_id>");
-      await sendTelegram(chatId, `🧾 Paste jawapan ChatGPT untuk komen ni:\n\`${commentId}\``, { force_reply: true });
+      await sendTelegram(chatId,
+        `🧾 Paste jawapan ChatGPT untuk komen ni:\n\`${commentId}\``,
+        { force_reply: true }
+      );
+
+      await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        callback_query_id: cb.id,
+      });
+      return res.sendStatus(200);
     }
+
     // Bila user reply dengan jawapan ChatGPT
-    else if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
+    const msg = update.message;
+    if (msg?.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
+      const chatId = msg.chat.id;
+      const text = msg.text?.trim();
       const match = msg.reply_to_message.text.match(/`(.*?)`/);
       const commentId = match ? match[1] : null;
+
       if (commentId && text) {
         await postToFacebook(commentId, text);
         await sendTelegram(chatId, "✅ Dah auto-reply komen dekat Facebook!");
