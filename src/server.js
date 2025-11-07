@@ -50,11 +50,9 @@ ${comment}
 👉 *Salin komen di atas & paste ke ChatGPT untuk dapat jawapan.*
 `;
 
-      const inlineKeyboard = {
-        inline_keyboard: [
-          [{ text: "📝 Post to FB", callback_data: `post_${commentId}` }],
-        ],
-      };
+const inlineKeyboard = {
+  inline_keyboard: [[{ text: "📝 Post to FB", callback_data: `post_${commentId}` }]],
+};
 
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         chat_id: TELEGRAM_CHAT_ID,
@@ -78,22 +76,26 @@ app.post("/telegram", async (req, res) => {
     const update = req.body;
 
     // Bila tekan butang Post to FB
-    if (update.callback_query) {
-      const cb = update.callback_query;
+    if (req.body.callback_query) {
+      const cb = req.body.callback_query;
       const chatId = cb.message.chat.id;
       const commentId = cb.data.replace("post_", "");
-
-      await sendTelegram(chatId,
+    
+      // Bila user tekan Post to FB, bot terus balas
+      await sendTelegram(
+        chatId,
         `🧾 Paste jawapan ChatGPT untuk komen ni:\n\`${commentId}\``,
         { force_reply: true }
       );
-
+    
+      // confirm pada Telegram supaya button hilang loading
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
         callback_query_id: cb.id,
       });
+    
       return res.sendStatus(200);
     }
-
+    
     // Bila user reply dengan jawapan ChatGPT
     const msg = update.message;
     if (msg?.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
