@@ -75,14 +75,44 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Initialize Telegram bot
-setupTelegramBot();
+// Root endpoint to prevent white screen
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'GPT Pro Malaysia - Facebook Comment Reply System',
+    endpoints: {
+      health: '/health',
+      facebookWebhook: '/fb/webhook',
+      telegramWebhook: '/telegram'
+    },
+    timestamp: new Date().toISOString() 
+  });
+});
+
+// Initialize Telegram bot (with error handling)
+try {
+  setupTelegramBot();
+} catch (error) {
+  logger.log('error', 'Failed to initialize Telegram bot', { error: error.message });
+  console.error('⚠️ Telegram bot initialization failed, but server will continue:', error.message);
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  logger.log('error', 'Unhandled error', { error: err.message, stack: err.stack });
+  res.status(500).json({ error: 'Internal server error', message: err.message });
+});
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   logger.log('server', `Server started on port ${PORT}`, { port: PORT });
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📱 Facebook webhook: POST /fb/webhook`);
   console.log(`🤖 Telegram webhook: POST /telegram`);
+  console.log(`❤️  Health check: GET /health`);
+}).on('error', (err) => {
+  logger.log('error', 'Server failed to start', { error: err.message });
+  console.error('❌ Server failed to start:', err.message);
+  process.exit(1);
 });
 
