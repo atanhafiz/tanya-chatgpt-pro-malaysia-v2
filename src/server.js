@@ -3,12 +3,18 @@ import express from 'express';
 import { handleFBWebhook } from './fbWebhook.js';
 import { setupTelegramBot, getBot } from './telegramHandler.js';
 import logger from './utils/logger.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+// === Setup ===
 dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
+
+// === File Path Setup ===
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // === Middleware ===
 app.use(express.urlencoded({ extended: true }));
@@ -70,24 +76,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', base_url: BASE_URL, timestamp: new Date().toISOString() });
 });
 
-
-
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Privacy Policy page
+// === Privacy Policy page ===
 app.get('/privacy', (req, res) => {
   res.sendFile(path.join(__dirname, 'privacy.html'));
 });
-
-
-
-
-
-
 
 // === Root Endpoint ===
 app.get('/', (req, res) => {
@@ -98,7 +90,8 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       facebookWebhook: '/fb/webhook',
-      telegramWebhook: '/telegram'
+      telegramWebhook: '/telegram',
+      privacy: '/privacy'
     },
     timestamp: new Date().toISOString()
   });
@@ -119,26 +112,15 @@ app.use((err, req, res, next) => {
 });
 
 // === Start Server ===
-app
-  .listen(PORT, '0.0.0.0', () => {
-    logger.log('server', `Server started on port ${PORT}`, { port: PORT });
-    console.log(`🚀 Server running at ${BASE_URL}`);
-    console.log(`📘 Facebook webhook: ${BASE_URL}/fb/webhook`);
-    console.log(`🤖 Telegram webhook: ${BASE_URL}/telegram`);
-    console.log(`❤️ Health check: ${BASE_URL}/health`);
-  })
-  .on('error', (err) => {
-    logger.log('error', 'Server failed to start', { error: err.message });
-    console.error('❌ Server failed to start:', err.message);
-    process.exit(1);
-  });
-  import path from 'path';
-  import { fileURLToPath } from 'url';
-  
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  
-  app.get('/privacy', (req, res) => {
-    res.sendFile(path.join(__dirname, 'privacy.html'));
-  });
-  
+app.listen(PORT, '0.0.0.0', () => {
+  logger.log('server', `Server started on port ${PORT}`, { port: PORT });
+  console.log(`🚀 Server running at ${BASE_URL}`);
+  console.log(`📘 Facebook webhook: ${BASE_URL}/fb/webhook`);
+  console.log(`🤖 Telegram webhook: ${BASE_URL}/telegram`);
+  console.log(`❤️ Health check: ${BASE_URL}/health`);
+  console.log(`🔒 Privacy policy: ${BASE_URL}/privacy`);
+}).on('error', (err) => {
+  logger.log('error', 'Server failed to start', { error: err.message });
+  console.error('❌ Server failed to start:', err.message);
+  process.exit(1);
+});
