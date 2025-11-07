@@ -10,7 +10,10 @@ logs/
 
 # Data storage
 data/
-*.json
+# Ignore JSON data, tapi jangan ignore package.json
+# *.json
+!package.json
+!package-lock.json
 
 # OS files
 .DS_Store
