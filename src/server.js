@@ -70,6 +70,25 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', base_url: BASE_URL, timestamp: new Date().toISOString() });
 });
 
+
+
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Privacy Policy page
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'privacy.html'));
+});
+
+
+
+
+
+
+
 // === Root Endpoint ===
 app.get('/', (req, res) => {
   res.json({
