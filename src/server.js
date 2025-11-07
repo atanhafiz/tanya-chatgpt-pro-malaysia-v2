@@ -131,8 +131,12 @@ async function sendTelegram(chatId, text, options = {}) {
 
 async function postToFacebook(commentId, message) {
   const url = `https://graph.facebook.com/v21.0/${commentId}/comments`;
-  await axios.post(`${url}?access_token=${FB_PAGE_TOKEN}`, { message });
-  console.log(`✅ Posted reply to FB comment: ${commentId}`);
+  try {
+    const res = await axios.post(`${url}?access_token=${FB_PAGE_TOKEN}`, { message });
+    console.log(`✅ Posted reply to FB comment: ${commentId}`, res.data);
+  } catch (err) {
+    console.error("❌ FB post error details:", err.response?.data || err.message);
+  }
 }
 
 // ================== HEALTH CHECK ==================
