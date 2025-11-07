@@ -80,18 +80,18 @@ app.post("/fb/webhook", async (req, res) => {
 // ================== TELEGRAM HANDLER ==================
 app.post("/telegram", async (req, res) => {
   try {
-    // Detect message or callback
     const update = req.body;
-    const msg = update.message;
-    const callback = update.callback_query;
 
-    // ========== Handle callback buttons ==========
-    if (callback) {
-      const chatId = callback.message.chat.id;
-      const data = callback.data;
+    // === Detect callback button ===
+    if (update.callback_query) {
+      const cb = update.callback_query;
+      const chatId = cb.message.chat.id;
+      const data = cb.data;
+      const commentMatch = cb.message.text.match(/💭 \*Comment:\* (.*)/);
+      const comment = commentMatch ? commentMatch[1] : "Tiada komen.";
 
-      const match = callback.message.text.match(/💭 \*Comment:\* (.*)/);
-      const comment = match ? match[1] : "Tiada komen.";
+      console.log(`📩 Telegram callback detected: ${data}`);
+      console.log(`💭 Comment: ${comment}`);
 
       if (data === "copy_prompt") {
         const prompt = `💬 *Prompt:*\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
@@ -101,15 +101,15 @@ app.post("/telegram", async (req, res) => {
         await sendTelegram(chatId, prompt);
       }
 
-      // Acknowledge callback supaya butang hilang loading
       await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
-        callback_query_id: callback.id,
+        callback_query_id: cb.id,
       });
 
       return res.sendStatus(200);
     }
 
-    // ========== Handle normal message ==========
+    // === Detect normal message ===
+    const msg = update.message;
     if (!msg) return res.sendStatus(200);
 
     const chatId = msg.chat.id;
@@ -129,7 +129,7 @@ app.post("/telegram", async (req, res) => {
       if (!commentId) return await sendTelegram(chatId, `⚠️ Usage: /post <comment_id>`);
       await sendTelegram(chatId, `🧾 Paste your reply for comment ID:\n\`${commentId}\``, { force_reply: true });
     } else if (text === "/status") {
-      await sendTelegram(chatId, "📊 System OK — v1.5.4 running");
+      await sendTelegram(chatId, "📊 System OK — v1.5.5 Guard Mode running");
     }
 
     res.sendStatus(200);
