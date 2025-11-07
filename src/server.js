@@ -4,7 +4,6 @@ import dotenv from "dotenv";
 import axios from "axios";
 import cors from "cors";
 import fs from "fs-extra";
-import path from "path";
 
 dotenv.config();
 
@@ -78,10 +77,39 @@ app.post("/fb/webhook", async (req, res) => {
   }
 });
 
-// ================== TELEGRAM MESSAGE HANDLER ==================
+// ================== TELEGRAM HANDLER ==================
 app.post("/telegram", async (req, res) => {
   try {
-    const msg = req.body.message;
+    // Detect message or callback
+    const update = req.body;
+    const msg = update.message;
+    const callback = update.callback_query;
+
+    // ========== Handle callback buttons ==========
+    if (callback) {
+      const chatId = callback.message.chat.id;
+      const data = callback.data;
+
+      const match = callback.message.text.match(/💭 \*Comment:\* (.*)/);
+      const comment = match ? match[1] : "Tiada komen.";
+
+      if (data === "copy_prompt") {
+        const prompt = `💬 *Prompt:*\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
+        await sendTelegram(chatId, prompt);
+      } else if (data === "copy_ahe") {
+        const prompt = `🎯 *AHE Prompt Style*\n\nTolong jawab komen ni dengan tone profesional & mesra pelanggan AHE:\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
+        await sendTelegram(chatId, prompt);
+      }
+
+      // Acknowledge callback supaya butang hilang loading
+      await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        callback_query_id: callback.id,
+      });
+
+      return res.sendStatus(200);
+    }
+
+    // ========== Handle normal message ==========
     if (!msg) return res.sendStatus(200);
 
     const chatId = msg.chat.id;
@@ -101,40 +129,12 @@ app.post("/telegram", async (req, res) => {
       if (!commentId) return await sendTelegram(chatId, `⚠️ Usage: /post <comment_id>`);
       await sendTelegram(chatId, `🧾 Paste your reply for comment ID:\n\`${commentId}\``, { force_reply: true });
     } else if (text === "/status") {
-      await sendTelegram(chatId, "📊 System OK — v1.5.3 running");
+      await sendTelegram(chatId, "📊 System OK — v1.5.4 running");
     }
 
     res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Telegram handler error:", err.message);
-    res.sendStatus(500);
-  }
-});
-
-// ================== TELEGRAM CALLBACK HANDLER ==================
-app.post("/telegram/callback", async (req, res) => {
-  try {
-    const query = req.body.callback_query;
-    if (!query) return res.sendStatus(200);
-
-    const chatId = query.message.chat.id;
-    const data = query.data;
-
-    // Extract comment text from previous message
-    const match = query.message.text.match(/💭 \*Comment:\* (.*)/);
-    const comment = match ? match[1] : "Tiada komen.";
-
-    if (data === "copy_prompt") {
-      const prompt = `💬 *Prompt:*\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
-      await sendTelegram(chatId, prompt);
-    } else if (data === "copy_ahe") {
-      const prompt = `🎯 *AHE Prompt Style*\n\nTolong jawab komen ni dengan tone profesional & mesra pelanggan AHE:\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
-      await sendTelegram(chatId, prompt);
-    }
-
-    res.sendStatus(200);
-  } catch (err) {
-    console.error("❌ Callback handler error:", err.message);
+    console.error("❌ Telegram webhook error:", err.message);
     res.sendStatus(500);
   }
 });
