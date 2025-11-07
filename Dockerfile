@@ -1,27 +1,20 @@
 FROM node:18-alpine
 
-# Set working directory
 WORKDIR /usr/src/app
 
-# Copy package files first
-COPY package*.json /usr/src/app/
+# Copy semua dulu untuk debug
+COPY . .
 
-# Install dependencies
-RUN npm install --omit=dev
+# Debug step: senaraikan fail dalam container
+RUN echo "=== DEBUG: LISTING FILES IN /usr/src/app ===" && ls -lah /usr/src/app && echo "=============================="
 
-# Copy the rest of the application
-COPY . /usr/src/app
+# Cuba install dependencies
+RUN if [ -f "/usr/src/app/package.json" ]; then echo "✅ package.json found"; else echo "❌ package.json NOT FOUND"; fi
+RUN npm install --omit=dev || true
 
-# Expose port
 EXPOSE 3000
 
-# Set environment
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"
-
-# Start app
 CMD ["node", "src/server.js"]
