@@ -18,6 +18,8 @@ const {
   PUBLIC_BASE_URL,
 } = process.env;
 
+let lastCommentId = null; // simpan comment ID terakhir dari Telegram
+
 // ✅ FACEBOOK VERIFY
 app.get("/fb/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -81,7 +83,10 @@ app.post("/telegram", async (req, res) => {
       const chatId = cb.message.chat.id;
       const commentId = cb.data.replace("post_", "");
 
-      // Hantar respon cepat untuk elak Telegram retry
+      // Simpan ID terakhir
+      lastCommentId = commentId;
+
+      // Hantar respon cepat untuk elak retry
       res.sendStatus(200);
 
       try {
@@ -102,22 +107,24 @@ app.post("/telegram", async (req, res) => {
       return;
     }
 
-    // === USER REPLY (Paste jawapan ChatGPT) ===
+    // === USER MESSAGE (Paste jawapan ChatGPT) ===
     const msg = update.message;
     if (!msg) return res.sendStatus(200);
 
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
-
     let commentId = null;
 
-    // kalau mesej reply
+    // kalau mesej reply kepada bot
     if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
       const match = msg.reply_to_message.text.match(/`(.*?)`/);
       commentId = match ? match[1] : null;
     }
 
-    // kalau mesej baru (bukan reply), check ada pattern ID
+    // fallback guna lastCommentId
+    if (!commentId && lastCommentId) commentId = lastCommentId;
+
+    // kalau mesej ada ID dalam teks
     const idMatch = text?.match(/\d+_\d+/);
     if (!commentId && idMatch) commentId = idMatch[0];
 
@@ -126,11 +133,12 @@ app.post("/telegram", async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // Bila ada ID & text panjang, post ke FB
-    if (commentId && text.length > 10) {
+    // post ke FB bila cukup panjang
+    if (commentId && text.length > 3) {
       await postToFacebook(commentId, text);
       await sendTelegram(chatId, `✅ Dah auto-reply komen dekat Facebook!\n🆔 ${commentId}`);
       console.log(`✅ FB reply sent for ${commentId}`);
+      lastCommentId = null; // reset ID lepas berjaya
     }
 
     res.sendStatus(200);
