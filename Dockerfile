@@ -1,13 +1,14 @@
+# Dockerfile
 FROM node:18-alpine
+
 WORKDIR /usr/src/app
 
-# copy everything
-COPY . .
+# Copy ONLY contents of src (not the folder itself)
+COPY src/ ./
 
-# masuk ke src dan install dep
-RUN cd src && npm install --omit=dev
+RUN npm install --omit=dev
 
 EXPOSE 3000
 ENV PORT=3000
 
-CMD ["node", "src/server.js"]
+CMD ["node", "server.js"]
