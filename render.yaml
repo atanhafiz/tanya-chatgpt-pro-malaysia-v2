@@ -1,12 +1,11 @@
 services:
   - type: web
     name: tanya-chatgpt-pro-malaysia
-    env: node
+    env: docker
     plan: free
     region: singapore
     rootDir: .
-    buildCommand: npm install
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: PORT
         value: 3000
