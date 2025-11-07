@@ -2,7 +2,6 @@ import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import axios from "axios";
-import TelegramBot from "node-telegram-bot-api";
 import cors from "cors";
 import fs from "fs-extra";
 import path from "path";
@@ -23,15 +22,20 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// ================== LOG INIT ==================
 const LOG_DIR = "./logs";
 const LOG_FILE = `${LOG_DIR}/replied.json`;
 fs.ensureFileSync(LOG_FILE);
-if (!fs.existsSync(LOG_FILE)) fs.writeJSONSync(LOG_FILE, []);
+try {
+  const data = fs.readFileSync(LOG_FILE, "utf8");
+  if (!data.trim()) fs.writeJSONSync(LOG_FILE, []);
+} catch {
+  fs.writeJSONSync(LOG_FILE, []);
+}
 
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN || TELEGRAM_TOKEN, { polling: false });
-console.log("🤖 Telegram bot initialized");
+console.log("🤖 Telegram bot initialized (webhook mode)");
 
-// ================== FACEBOOK WEBHOOK VERIFY ==================
+// ================== FACEBOOK VERIFY ==================
 app.get("/fb/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -64,10 +68,9 @@ app.post("/fb/webhook", async (req, res) => {
 🏷️ _Powered by AHE Technology | Tanya ChatGPT Pro Malaysia_
 `;
 
-      await sendTelegramMessage(msg, author, comment);
+      await sendTelegramMessage(msg);
       console.log(`[FACEBOOK] 💬 New comment logged: ${author}`);
     }
-
     res.sendStatus(200);
   } catch (err) {
     console.error("❌ FB webhook error:", err.message);
@@ -75,7 +78,7 @@ app.post("/fb/webhook", async (req, res) => {
   }
 });
 
-// ================== TELEGRAM HANDLER ==================
+// ================== TELEGRAM MESSAGE HANDLER ==================
 app.post("/telegram", async (req, res) => {
   try {
     const msg = req.body.message;
@@ -84,10 +87,8 @@ app.post("/telegram", async (req, res) => {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
     const allowed = ALLOWED_CHAT_IDS?.split(",").map((id) => id.trim());
-
     if (allowed && !allowed.includes(String(chatId))) return res.sendStatus(200);
 
-    // Handle reply to "Paste your reply"
     if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste your reply for comment ID")) {
       const match = msg.reply_to_message.text.match(/`(.*?)`/);
       const commentId = match ? match[1] : null;
@@ -95,19 +96,12 @@ app.post("/telegram", async (req, res) => {
         await postToFacebook(commentId, text);
         await sendTelegram(chatId, `✅ Reply posted to Facebook!\n\n🏷️ _AHE Technology | Tanya ChatGPT Pro Malaysia_`);
       }
-    }
-
-    // Handle /post <comment_id>
-    else if (text?.startsWith("/post")) {
+    } else if (text?.startsWith("/post")) {
       const commentId = text.split(" ")[1];
-      if (!commentId)
-        return await sendTelegram(chatId, `⚠️ Usage: /post <comment_id>`);
+      if (!commentId) return await sendTelegram(chatId, `⚠️ Usage: /post <comment_id>`);
       await sendTelegram(chatId, `🧾 Paste your reply for comment ID:\n\`${commentId}\``, { force_reply: true });
-    }
-
-    // Handle /status
-    else if (text === "/status") {
-      await sendTelegram(chatId, "📊 System OK — v1.5.2 running");
+    } else if (text === "/status") {
+      await sendTelegram(chatId, "📊 System OK — v1.5.3 running");
     }
 
     res.sendStatus(200);
@@ -117,8 +111,36 @@ app.post("/telegram", async (req, res) => {
   }
 });
 
+// ================== TELEGRAM CALLBACK HANDLER ==================
+app.post("/telegram/callback", async (req, res) => {
+  try {
+    const query = req.body.callback_query;
+    if (!query) return res.sendStatus(200);
+
+    const chatId = query.message.chat.id;
+    const data = query.data;
+
+    // Extract comment text from previous message
+    const match = query.message.text.match(/💭 \*Comment:\* (.*)/);
+    const comment = match ? match[1] : "Tiada komen.";
+
+    if (data === "copy_prompt") {
+      const prompt = `💬 *Prompt:*\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
+      await sendTelegram(chatId, prompt);
+    } else if (data === "copy_ahe") {
+      const prompt = `🎯 *AHE Prompt Style*\n\nTolong jawab komen ni dengan tone profesional & mesra pelanggan AHE:\n\n"${comment}"\n\n_(Salin mesej ni & paste ke ChatGPT Pro hang)_`;
+      await sendTelegram(chatId, prompt);
+    }
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("❌ Callback handler error:", err.message);
+    res.sendStatus(500);
+  }
+});
+
 // ================== FUNCTIONS ==================
-async function sendTelegramMessage(text, author, comment) {
+async function sendTelegramMessage(text) {
   const inlineKeyboard = {
     inline_keyboard: [
       [
@@ -129,24 +151,11 @@ async function sendTelegramMessage(text, author, comment) {
     ],
   };
 
-  // send main message
-  const sent = await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+  await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     chat_id: ALLOWED_CHAT_IDS,
     text,
     parse_mode: "Markdown",
     reply_markup: inlineKeyboard,
-  });
-
-  // Listen for callback button click
-  bot.on("callback_query", async (query) => {
-    if (query.data === "copy_prompt" || query.data === "copy_ahe") {
-      const aheTone = query.data === "copy_ahe";
-      const prompt = aheTone
-        ? `🎯 *AHE Prompt Style*\n\nTolong jawab komen ni dengan tone profesional & mesra pelanggan AHE:\n\n"${comment}"`
-        : `💬 *Prompt:*\n\n"${comment}"`;
-
-      await bot.sendMessage(query.message.chat.id, prompt, { parse_mode: "Markdown" });
-    }
   });
 }
 
@@ -165,8 +174,10 @@ async function postToFacebook(commentId, message) {
   console.log(`✅ Posted reply to FB comment: ${commentId}`);
 }
 
+// ================== HEALTH CHECK ==================
 app.get("/health", (req, res) => res.send("✅ Server Running OK"));
 
+// ================== START SERVER ==================
 app.listen(PORT || 3000, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌍 Base URL: ${PUBLIC_BASE_URL}`);
