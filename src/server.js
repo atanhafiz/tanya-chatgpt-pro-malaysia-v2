@@ -76,13 +76,13 @@ app.post("/telegram", async (req, res) => {
   try {
     const update = req.body;
 
-    // === CALLBACK (Post to FB button) ===
+    // === CALLBACK (bila tekan Post to FB) ===
     if (update.callback_query) {
       const cb = update.callback_query;
       const chatId = cb.message.chat.id;
       const commentId = cb.data.replace("post_", "");
 
-      // Reply segera 200 OK untuk elak Telegram retry banyak kali
+      // Bagi respon cepat supaya Telegram tak retry
       res.sendStatus(200);
 
       try {
@@ -92,7 +92,6 @@ app.post("/telegram", async (req, res) => {
           { force_reply: true }
         );
 
-        // Jawab callback supaya butang loading hilang
         await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
           callback_query_id: cb.id,
         });
@@ -103,6 +102,46 @@ app.post("/telegram", async (req, res) => {
       }
       return;
     }
+
+    // === USER REPLY (Paste jawapan ChatGPT) ===
+    const msg = update.message;
+    if (!msg) return res.sendStatus(200);
+
+    const chatId = msg.chat.id;
+    const text = msg.text?.trim();
+
+    // Detect sama ada user reply ATAU mesej panjang biasa
+    let commentId = null;
+
+    // kalau mesej reply
+    if (msg.reply_to_message && msg.reply_to_message.text.includes("Paste jawapan ChatGPT")) {
+      const match = msg.reply_to_message.text.match(/`(.*?)`/);
+      commentId = match ? match[1] : null;
+    }
+
+    // kalau mesej baru (bukan reply), check ada pattern ID
+    const idMatch = text?.match(/\d+_\d+/);
+    if (!commentId && idMatch) commentId = idMatch[0];
+
+    // kalau masih tak detect ID, log & skip
+    if (!commentId) {
+      console.log("⚠️ Tiada commentId dijumpai dalam mesej:", text);
+      return res.sendStatus(200);
+    }
+
+    // Bila ada ID & text panjang, post ke FB
+    if (commentId && text.length > 10) {
+      await postToFacebook(commentId, text);
+      await sendTelegram(chatId, `✅ Dah auto-reply komen dekat Facebook!\n🆔 ${commentId}`);
+      console.log(`✅ FB reply sent for ${commentId}`);
+    }
+
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("❌ Telegram webhook error:", err.message || err);
+    res.status(500).send("Webhook processing error");
+  }
+});
 
     // === USER REPLY (Paste jawapan ChatGPT) ===
     const msg = update.message;
