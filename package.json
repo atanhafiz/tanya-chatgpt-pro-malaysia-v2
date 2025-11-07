@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "Simple Facebook to Telegram bridge with auto reply button",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
