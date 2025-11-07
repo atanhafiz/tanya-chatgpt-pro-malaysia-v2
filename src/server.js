@@ -129,6 +129,10 @@ async function sendTelegram(chatId, text, options = {}) {
   });
 }
 
+// force rebuild debug 1// Debug rebuild: v1.5.8
+
+
+
 async function postToFacebook(commentId, message) {
   const url = `https://graph.facebook.com/v21.0/${commentId}/comments`;
   try {
